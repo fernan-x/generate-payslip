@@ -95,146 +95,35 @@ llxHeader("", $langs->trans("GeneratePayslipArea"));
 
 print load_fiche_titre($langs->trans("GeneratePayslipArea"), '', 'generatepayslip.png@generatepayslip');
 
-print '<div class="fichecenter"><div class="fichethirdleft">';
+require_once DOL_DOCUMENT_ROOT.'/core/modules/export/modules_export.php';
 
+use PhpOffice\PhpSpreadsheet\IOFactory;
+require_once DOL_DOCUMENT_ROOT.'/includes/phpoffice/phpspreadsheet/src/autoloader.php';
+require_once DOL_DOCUMENT_ROOT.'/includes/Psr/autoloader.php';
+require_once PHPEXCELNEW_PATH.'Spreadsheet.php';
+$spreadsheet = IOFactory::load(dol_buildpath('/generatepayslip/assets/sample.xls'));
 
-/* BEGIN MODULEBUILDER DRAFT MYOBJECT
-// Draft MyObject
-if (! empty($conf->generatepayslip->enabled) && $user->rights->generatepayslip->read)
-{
-	$langs->load("orders");
+// Get the actual month as integer
+$now = dol_now();
+$monthNb = intval(dol_print_date($now, '%m'));
 
-	$sql = "SELECT c.rowid, c.ref, c.ref_client, c.total_ht, c.tva as total_tva, c.total_ttc, s.rowid as socid, s.nom as name, s.client, s.canvas";
-	$sql.= ", s.code_client";
-	$sql.= " FROM ".MAIN_DB_PREFIX."commande as c";
-	$sql.= ", ".MAIN_DB_PREFIX."societe as s";
-	if (! $user->rights->societe->client->voir && ! $socid) $sql.= ", ".MAIN_DB_PREFIX."societe_commerciaux as sc";
-	$sql.= " WHERE c.fk_soc = s.rowid";
-	$sql.= " AND c.fk_statut = 0";
-	$sql.= " AND c.entity IN (".getEntity('commande').")";
-	if (! $user->rights->societe->client->voir && ! $socid) $sql.= " AND s.rowid = sc.fk_soc AND sc.fk_user = ".((int) $user->id);
-	if ($socid)	$sql.= " AND c.fk_soc = ".((int) $socid);
+// Load the correct worsheet in function of the month
+dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
+$spreadsheetParser = new Code42SpreadsheetParser();
+$name = $spreadsheetParser->getWorksheetNameByMonth($monthNb);
+$worksheet = $spreadsheet->getSheetByName($name);
+$rules = $spreadsheetParser->getRuleForWorksheet($name);
 
-	$resql = $db->query($sql);
-	if ($resql)
-	{
-		$total = 0;
-		$num = $db->num_rows($resql);
+if ($worksheet && $rules) {
+	$date = $worksheet->getCell($rules['date'])->getValue();
+	$date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($date);
 
-		print '<table class="noborder centpercent">';
-		print '<tr class="liste_titre">';
-		print '<th colspan="3">'.$langs->trans("DraftMyObjects").($num?'<span class="badge marginleftonlyshort">'.$num.'</span>':'').'</th></tr>';
+	$year = $worksheet->getCell($rules['year'])->getValue();
 
-		$var = true;
-		if ($num > 0)
-		{
-			$i = 0;
-			while ($i < $num)
-			{
-
-				$obj = $db->fetch_object($resql);
-				print '<tr class="oddeven"><td class="nowrap">';
-
-				$myobjectstatic->id=$obj->rowid;
-				$myobjectstatic->ref=$obj->ref;
-				$myobjectstatic->ref_client=$obj->ref_client;
-				$myobjectstatic->total_ht = $obj->total_ht;
-				$myobjectstatic->total_tva = $obj->total_tva;
-				$myobjectstatic->total_ttc = $obj->total_ttc;
-
-				print $myobjectstatic->getNomUrl(1);
-				print '</td>';
-				print '<td class="nowrap">';
-				print '</td>';
-				print '<td class="right" class="nowrap">'.price($obj->total_ttc).'</td></tr>';
-				$i++;
-				$total += $obj->total_ttc;
-			}
-			if ($total>0)
-			{
-
-				print '<tr class="liste_total"><td>'.$langs->trans("Total").'</td><td colspan="2" class="right">'.price($total)."</td></tr>";
-			}
-		}
-		else
-		{
-
-			print '<tr class="oddeven"><td colspan="3" class="opacitymedium">'.$langs->trans("NoOrder").'</td></tr>';
-		}
-		print "</table><br>";
-
-		$db->free($resql);
-	}
-	else
-	{
-		dol_print_error($db);
-	}
+	var_dump($date, $year, $rules);
+} else {
+	print "Can't load worksheet ".$name;
 }
-END MODULEBUILDER DRAFT MYOBJECT */
-
-
-print '</div><div class="fichetwothirdright"><div class="ficheaddleft">';
-
-
-$NBMAX = $conf->global->MAIN_SIZE_SHORTLIST_LIMIT;
-$max = $conf->global->MAIN_SIZE_SHORTLIST_LIMIT;
-
-/* BEGIN MODULEBUILDER LASTMODIFIED MYOBJECT
-// Last modified myobject
-if (! empty($conf->generatepayslip->enabled) && $user->rights->generatepayslip->read)
-{
-	$sql = "SELECT s.rowid, s.ref, s.label, s.date_creation, s.tms";
-	$sql.= " FROM ".MAIN_DB_PREFIX."generatepayslip_myobject as s";
-	//if (! $user->rights->societe->client->voir && ! $socid) $sql.= ", ".MAIN_DB_PREFIX."societe_commerciaux as sc";
-	$sql.= " WHERE s.entity IN (".getEntity($myobjectstatic->element).")";
-	//if (! $user->rights->societe->client->voir && ! $socid) $sql.= " AND s.rowid = sc.fk_soc AND sc.fk_user = ".((int) $user->id);
-	//if ($socid)	$sql.= " AND s.rowid = $socid";
-	$sql .= " ORDER BY s.tms DESC";
-	$sql .= $db->plimit($max, 0);
-
-	$resql = $db->query($sql);
-	if ($resql)
-	{
-		$num = $db->num_rows($resql);
-		$i = 0;
-
-		print '<table class="noborder centpercent">';
-		print '<tr class="liste_titre">';
-		print '<th colspan="2">';
-		print $langs->trans("BoxTitleLatestModifiedMyObjects", $max);
-		print '</th>';
-		print '<th class="right">'.$langs->trans("DateModificationShort").'</th>';
-		print '</tr>';
-		if ($num)
-		{
-			while ($i < $num)
-			{
-				$objp = $db->fetch_object($resql);
-
-				$myobjectstatic->id=$objp->rowid;
-				$myobjectstatic->ref=$objp->ref;
-				$myobjectstatic->label=$objp->label;
-				$myobjectstatic->status = $objp->status;
-
-				print '<tr class="oddeven">';
-				print '<td class="nowrap">'.$myobjectstatic->getNomUrl(1).'</td>';
-				print '<td class="right nowrap">';
-				print "</td>";
-				print '<td class="right nowrap">'.dol_print_date($db->jdate($objp->tms), 'day')."</td>";
-				print '</tr>';
-				$i++;
-			}
-
-			$db->free($resql);
-		} else {
-			print '<tr class="oddeven"><td colspan="3" class="opacitymedium">'.$langs->trans("None").'</td></tr>';
-		}
-		print "</table><br>";
-	}
-}
-*/
-
-print '</div></div></div>';
 
 // End of page
 llxFooter();
