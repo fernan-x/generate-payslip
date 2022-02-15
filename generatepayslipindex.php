@@ -103,24 +103,43 @@ require_once DOL_DOCUMENT_ROOT.'/includes/Psr/autoloader.php';
 require_once PHPEXCELNEW_PATH.'Spreadsheet.php';
 $spreadsheet = IOFactory::load(dol_buildpath('/generatepayslip/assets/sample.xls'));
 
-// Get the actual month as integer
 $now = dol_now();
-$monthNb = intval(dol_print_date($now, '%m'));
+
+$month = intval(dol_print_date($now, '%m')); // Get the date month as integer
+$year = intval(dol_print_date($now, '%Y')); // Get the date year as integer
+$firstDay = dol_get_first_day($year, $month); // Get the first day of month
+$lastDay = dol_get_last_day($year, $month); // Get the last day of month
+
+$workingDay = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday'); // Working days
+
+$outputLangs = new Translate('', $conf);
+$outputLangs->setDefaultLang('en_US');
+$outputLangs->loadLangs(['main']);
+var_dump(dol_print_date($firstDay, '%A %d', 'auto', $outputLangs));
+var_dump(dol_print_date($lastDay, '%A %d', 'auto', $outputLangs));
+
+$dayRow = array();
+
+for ($i = $firstDay; $i < $lastDay; $i = strtotime('+1 day', $i)) {
+	$dayRow[] = dol_print_date($i, '%A %d', 'auto', $outputLangs);
+}
+
+var_dump($dayRow);
 
 // Load the correct worsheet in function of the month
 dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
 $spreadsheetParser = new Code42SpreadsheetParser();
-$name = $spreadsheetParser->getWorksheetNameByMonth($monthNb);
+$name = $spreadsheetParser->getWorksheetNameByMonth($month);
 $worksheet = $spreadsheet->getSheetByName($name);
 $rules = $spreadsheetParser->getRuleForWorksheet($name);
 
 if ($worksheet && $rules) {
 	$date = $worksheet->getCell($rules['date'])->getValue();
-	$date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject($date);
+	$date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToTimestamp($date);
 
 	$year = $worksheet->getCell($rules['year'])->getValue();
 
-	var_dump($date, $year, $rules);
+	var_dump($date, $year);
 } else {
 	print "Can't load worksheet ".$name;
 }

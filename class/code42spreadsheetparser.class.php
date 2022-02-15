@@ -39,6 +39,8 @@ class Code42SpreadsheetParser {
 			'fevrier' => array(
 				'date' => 'J1',
 				'year' => 'L1',
+				'company' => 'B1',
+				'username' => 'B3',
 				'row' => array('from' => 9, 'to' => 37),
 				'hours' => array('from' => 'B', 'to' => 'E'),
 				'holiday' => 'H',
