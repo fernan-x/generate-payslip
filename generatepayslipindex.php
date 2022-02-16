@@ -56,6 +56,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
+dol_include_once('/generatepayslip/class/payslipdatagenerator.class.php');
 
 // Load translation files required by the page
 $langs->loadLangs(array("generatepayslip@generatepayslip"));
@@ -97,49 +98,121 @@ print load_fiche_titre($langs->trans("GeneratePayslipArea"), '', 'generatepaysli
 
 require_once DOL_DOCUMENT_ROOT.'/core/modules/export/modules_export.php';
 
-use PhpOffice\PhpSpreadsheet\IOFactory;
-require_once DOL_DOCUMENT_ROOT.'/includes/phpoffice/phpspreadsheet/src/autoloader.php';
-require_once DOL_DOCUMENT_ROOT.'/includes/Psr/autoloader.php';
-require_once PHPEXCELNEW_PATH.'Spreadsheet.php';
-$spreadsheet = IOFactory::load(dol_buildpath('/generatepayslip/assets/sample.xls'));
+$workingDays = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
+$referenceUser = new User($db);
+$user->fetch(2);
+$datas = new PayslipDataGenerator($db, dol_now(), $workingDays, $user);
 
-$now = dol_now();
-
-$month = intval(dol_print_date($now, '%m')); // Get the date month as integer
-$year = intval(dol_print_date($now, '%Y')); // Get the date year as integer
-$firstDay = dol_get_first_day($year, $month); // Get the first day of month
-$lastDay = dol_get_last_day($year, $month); // Get the last day of month
-
-$workingDay = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday'); // Working days
-
-$outputLangs = new Translate('', $conf);
+//$datas->generate();
+/*$outputLangs = new Translate('', $conf);
 $outputLangs->setDefaultLang('en_US');
 $outputLangs->loadLangs(['main']);
-var_dump(dol_print_date($firstDay, '%A %d', 'auto', $outputLangs));
-var_dump(dol_print_date($lastDay, '%A %d', 'auto', $outputLangs));
 
 $dayRow = array();
 
 for ($i = $firstDay; $i < $lastDay; $i = strtotime('+1 day', $i)) {
-	$dayRow[] = dol_print_date($i, '%A %d', 'auto', $outputLangs);
+	$row = array();
+	$row['key'] = dol_strtolower(dol_print_date($i, '%A', 'auto', $outputLangs));
+	$row['number'] = intval(dol_print_date($i, '%d', 'auto', $outputLangs));
+	// Set worked day
+	if (in_array($row['key'], $workingDay)) {
+		$row['worked'] = true;
+	} else {
+		$row['worked'] = false;
+	}
+
+	// Add holiday to the worked day
+
+
+	$dayRow[$i] = $row;
 }
 
+print '<pre>';
 var_dump($dayRow);
+print '</pre>';
+*/
 
-// Load the correct worsheet in function of the month
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
+
+require_once DOL_DOCUMENT_ROOT.'/includes/phpoffice/phpspreadsheet/src/autoloader.php';
+require_once DOL_DOCUMENT_ROOT.'/includes/Psr/autoloader.php';
+dol_include_once('/generatepayslip/vendor/autoload.php');
+
+// Create a copy of the spreadsheet
+$sample = dol_buildpath('/generatepayslip/assets/sample.xls');
+$destinationPath = $conf->generatepayslip->multidir_output[$conf->entity];
+if (empty($destinationPath)) {
+	$destinationPath = $conf->generatepayslip->dir_output;
+}
+$sampleCopy = $destinationPath.'/test.xlsx';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+$res = dol_copy($sample, $sampleCopy);
+
+// Load spreadsheet
+$spreadsheet = IOFactory::load($sampleCopy);
+
+
+// Load the correct worksheet in function of the month
 dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
 $spreadsheetParser = new Code42SpreadsheetParser();
+$month = $datas->getMonth();
+
 $name = $spreadsheetParser->getWorksheetNameByMonth($month);
 $worksheet = $spreadsheet->getSheetByName($name);
 $rules = $spreadsheetParser->getRuleForWorksheet($name);
 
 if ($worksheet && $rules) {
+	// Debug date of the worksheet
 	$date = $worksheet->getCell($rules['date'])->getValue();
-	$date = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToTimestamp($date);
+	$date = Date::excelToTimestamp($date);
+	var_dump(dol_print_date($date));
 
-	$year = $worksheet->getCell($rules['year'])->getValue();
+	// Fill date and year datas
+	$worksheet->setCellValue($rules['date'], Date::stringToExcel(dol_print_date($datas->getFirstMonthDay(), '%Y-%m-%d')));
+	$worksheet->setCellValue($rules['year'], $datas->getYear());
 
-	var_dump($date, $year);
+	// Fill enterprise name
+	$worksheet->setCellValue($rules['company'], $mysoc->name);
+
+	// Fill user name
+	$worksheet->setCellValue($rules['username'],  $user->getFullName($langs));
+
+	$daysData = $datas->getDaysData();
+	$row = $rules['row']['from'];
+	foreach ($daysData as $day) {
+		if ($row <= $rules['row']['to']) { // Avoid going outside of the row setup
+			if ($day['worked']) {
+				// Fill worked day
+				$worksheet->setCellValue($rules['hour_start_m'].$row, '08:00');
+				$worksheet->setCellValue($rules['hour_end_m'].$row, '12:00');
+				$worksheet->setCellValue($rules['hour_start_a'].$row, '14:00');
+				$worksheet->setCellValue($rules['hour_end_a'].$row, '17:00');
+			} else if ($day['absenceReason'] != 'NWD') { // We avoid absence of type not working day
+				// Fill absence column
+				if ($day['absenceReason'] == 'LEAVE_PAID_FR') {
+					$reason = 'CP';
+				} else {
+					$reason = $day['absenceReason'];
+				}
+				$worksheet->setCellValue($rules['holiday'].$row, $reason);
+			}
+		}
+
+		$row++;
+	}
+
+	$objWriter = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+	$objWriter->save($sampleCopy);
+
+	$pdf = new \PhpOffice\PhpSpreadsheet\Writer\Pdf\Mpdf($spreadsheet);
+	$pdf->setSheetIndex($spreadsheet->getIndex($worksheet));
+	$pdf->save($sampleCopy.'.pdf');
+	// apt-get install libreoffice
+	// https://wiki.ubuntu.com/LibreOffice/fr
+	// https://stackoverflow.com/questions/23223491/how-to-convert-xls-to-pdf-via-php
+	//libreoffice --headless --convert-to pdf:calc_pdf_Export --outdir ../../documents/generatepayslip/ ../../documents/generatepayslip/test.xls
+
 } else {
 	print "Can't load worksheet ".$name;
 }
