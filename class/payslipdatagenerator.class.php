@@ -4,6 +4,7 @@ use h2g2\QueryBuilder;
 use h2g2\QueryBuilderException;
 
 dol_include_once('/holiday/class/holiday.class.php');
+dol_include_once('/expensereport/class/expensereport.class.php');
 dol_include_once('/h2g2/class/querybuilder.class.php');
 
 class PayslipDataGenerator {
@@ -53,6 +54,11 @@ class PayslipDataGenerator {
 	private $holidays;
 
 	/**
+	 * @var array			Expenses list for the user
+	 */
+	private $expenses;
+
+	/**
 	 * Construct the generator for the month of the day given
 	 *
 	 * @param 	DoliDB 		$db					Database handler
@@ -84,13 +90,17 @@ class PayslipDataGenerator {
 		$this->firstMonthDay = dol_get_first_day($this->year, $this->month); // Get the first day of month
 		$this->lastMonthDay = dol_get_last_day($this->year, $this->month); // Get the last day of month
 
+		// Fetch holidays for the user
 		$this->fetchHolidays();
+
+		// Fetch expenses for the user
+		$this->fetchExpenses();
 	}
 
 	/**
-	 * Fetch holidays
+	 * Fetch user holidays into $this->holidays props
 	 *
-	 * @return array|null			List of holidays
+	 * @return void
 	 * @throws Exception
 	 */
 	private function fetchHolidays()
@@ -114,10 +124,46 @@ class PayslipDataGenerator {
 		}
 
 		$this->holidays = $holidays;
-
-		return $holidays;
 	}
 
+	/**
+	 * Fetch user expenses into $this->expenses props
+	 *
+	 * @return void
+	 * @throws Exception
+	 */
+	private function fetchExpenses()
+	{
+		global $conf;
+
+		$expenses = null;
+
+		try {
+			$expenses = QueryBuilder::table('expensereport AS t')
+				->select('et.total_ttc', 'et.date', 'tf.code')
+				->where([
+					['t.entity', '=', $conf->entity],
+					['t.fk_user_author', '=', $this->user->id],
+					['t.fk_statut', '=', ExpenseReport::STATUS_APPROVED], // We only take expense report that as been approved
+					['t.date_debut', '=', $this->db->idate($this->firstMonthDay)] // Must be the first day of the month to work
+				])
+				->join('expensereport_det AS et', 'et.fk_expensereport', 't.rowid')
+				->join('c_type_fees AS tf', 'tf.id', 'et.fk_c_type_fees')
+				->orderBy('et.date')
+				->get();
+		} catch (QueryBuilderException $e) {
+			dol_syslog('PayslipDataGenerator::fetchExpenses got an SQL error with the following request : '.$e->getRequest(), LOG_ERR);
+		}
+
+		$this->expenses = $expenses;
+	}
+
+	/**
+	 * Get all datas fore each days of the month
+	 *
+	 * @return void
+	 * @throws Exception
+	 */
 	public function getDaysData()
 	{
 		global $conf;
@@ -130,6 +176,7 @@ class PayslipDataGenerator {
 
 		for ($i = $this->firstMonthDay; $i <= $this->lastMonthDay; $i = strtotime('+1 day', $i)) {
 			$row = array();
+			$row['expenses'] = array();
 			$row['key'] = dol_strtolower(dol_print_date($i, '%A', 'auto', $outputLangs));
 			$row['number'] = intval(dol_print_date($i, '%d', 'auto', $outputLangs));
 
@@ -146,9 +193,8 @@ class PayslipDataGenerator {
 		}
 
 		// Add holiday to the worked day
-		$holidays = $this->fetchHolidays();
-		if ($holidays) {
-			foreach ($holidays as $holiday) {
+		if ($this->holidays) {
+			foreach ($this->holidays as $holiday) {
 				$holidayStart = strtotime($holiday->date_debut);
 				$holidayEnd = strtotime($holiday->date_fin);
 
@@ -159,6 +205,18 @@ class PayslipDataGenerator {
 					}
 				}
 
+			}
+		}
+
+		// Add expenses to the days
+		if ($this->expenses) {
+			foreach ($this->expenses as $expense) {
+				$expenseDate = strtotime($expense->date);
+				$expenseRow = &$dayRow[$expenseDate]['expenses'];
+				$expenseRow[] = array(
+					'amount' => $expense->total_ttc,
+					'type' => $expense->code
+				);
 			}
 		}
 
