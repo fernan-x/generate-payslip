@@ -126,7 +126,7 @@ class PayslipDataGenerator {
 
 		$dayRow = array();
 
-		for ($i = $this->firstMonthDay; $i < $this->lastMonthDay; $i = strtotime('+1 day', $i)) {
+		for ($i = $this->firstMonthDay; $i <= $this->lastMonthDay; $i = strtotime('+1 day', $i)) {
 			$row = array();
 			$row['key'] = dol_strtolower(dol_print_date($i, '%A', 'auto', $outputLangs));
 			$row['number'] = intval(dol_print_date($i, '%d', 'auto', $outputLangs));
@@ -150,7 +150,7 @@ class PayslipDataGenerator {
 				$holidayStart = strtotime($holiday->date_debut);
 				$holidayEnd = strtotime($holiday->date_fin);
 
-				for ($i = $holidayStart; $i < $holidayEnd; $i = strtotime('+1 day', $i)) { // Loop through each holiday day
+				for ($i = $holidayStart; $i <= $holidayEnd; $i = strtotime('+1 day', $i)) { // Loop through each holiday day
 					if ($dayRow[$i] && $dayRow[$i]['worked']) {
 						$dayRow[$i]['worked'] = false;
 						$dayRow[$i]['absenceReason'] = $holiday->code;
