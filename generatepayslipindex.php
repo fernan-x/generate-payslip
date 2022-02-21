@@ -204,15 +204,6 @@ if ($worksheet && $rules) {
 
 	$objWriter = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
 	$objWriter->save($sampleCopy);
-
-	$pdf = new \PhpOffice\PhpSpreadsheet\Writer\Pdf\Mpdf($spreadsheet);
-	$pdf->setSheetIndex($spreadsheet->getIndex($worksheet));
-	$pdf->save($sampleCopy.'.pdf');
-	// apt-get install libreoffice
-	// https://wiki.ubuntu.com/LibreOffice/fr
-	// https://stackoverflow.com/questions/23223491/how-to-convert-xls-to-pdf-via-php
-	//libreoffice --headless --convert-to pdf:calc_pdf_Export --outdir ../../documents/generatepayslip/ ../../documents/generatepayslip/test.xls
-
 } else {
 	print "Can't load worksheet ".$name;
 }
