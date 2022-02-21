@@ -113,6 +113,8 @@ class PayslipDataGenerator {
 			dol_syslog('PayslipDataGenerator::fetchHolidays got an SQL error with the following request : '.$e->getRequest(), LOG_ERR);
 		}
 
+		$this->holidays = $holidays;
+
 		return $holidays;
 	}
 
@@ -160,10 +162,12 @@ class PayslipDataGenerator {
 			}
 		}
 
+		print '<pre>';
+		var_dump($dayRow);
+		print '</pre>';
+		die();
+
 		return $dayRow;
-//		print '<pre>';
-//		var_dump($dayRow);
-//		print '</pre>';
 	}
 
 	public function getMonth()
