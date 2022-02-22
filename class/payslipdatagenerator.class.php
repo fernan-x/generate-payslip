@@ -220,24 +220,33 @@ class PayslipDataGenerator {
 			}
 		}
 
-		print '<pre>';
-		var_dump($dayRow);
-		print '</pre>';
-		die();
-
 		return $dayRow;
 	}
 
+	/**
+	 * Get the month loaded (example: 02)
+	 *
+	 * @return int
+	 */
 	public function getMonth()
 	{
 		return $this->month;
 	}
 
+	/**
+	 * Get the year loaded (example: 2022)
+	 * @return int
+	 */
 	public function getYear()
 	{
 		return $this->year;
 	}
 
+	/**
+	 * Get the first day of the month
+	 *
+	 * @return int|string
+	 */
 	public function getFirstMonthDay()
 	{
 		return $this->firstMonthDay;
