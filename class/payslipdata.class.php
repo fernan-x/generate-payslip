@@ -6,8 +6,9 @@ use h2g2\QueryBuilderException;
 dol_include_once('/holiday/class/holiday.class.php');
 dol_include_once('/expensereport/class/expensereport.class.php');
 dol_include_once('/h2g2/class/querybuilder.class.php');
+dol_include_once('/generatepayslip/class/mapper/expensemapper.class.php');
 
-class PayslipDataGenerator {
+class PayslipData {
 	/**
 	 * @var DoliDB 			Database handler
 	 */
@@ -150,6 +151,7 @@ class PayslipDataGenerator {
 				->join('expensereport_det AS et', 'et.fk_expensereport', 't.rowid')
 				->join('c_type_fees AS tf', 'tf.id', 'et.fk_c_type_fees')
 				->orderBy('et.date')
+				->dump()
 				->get();
 		} catch (QueryBuilderException $e) {
 			dol_syslog('PayslipDataGenerator::fetchExpenses got an SQL error with the following request : '.$e->getRequest(), LOG_ERR);
@@ -215,8 +217,29 @@ class PayslipDataGenerator {
 				$expenseRow = &$dayRow[$expenseDate]['expenses'];
 				$expenseRow[] = array(
 					'amount' => $expense->total_ttc,
-					'type' => $expense->code
+					'type' => ExpenseMapper::toSpreadSheet($expense->code)
 				);
+			}
+
+			// Group expenses by type
+			foreach ($dayRow as $key => $day) {
+				if (count($day['expenses']) > 0) {
+					$sortedExpenses = array();
+					foreach ($day['expenses'] as $expense) {
+						$type = $expense['type'];
+						$value = floatval($expense['amount']);
+
+						if ($sortedExpenses[$type]) {
+							$oldValue = floatval($sortedExpenses[$type]);
+							$newValue = $oldValue + $value;
+							$sortedExpenses[$type] = $newValue;
+						} else {
+							$sortedExpenses[$type] = floatval($value);
+						}
+					}
+
+					$dayRow[$key]['expenses'] = $sortedExpenses;
+				}
 			}
 		}
 
@@ -250,5 +273,15 @@ class PayslipDataGenerator {
 	public function getFirstMonthDay()
 	{
 		return $this->firstMonthDay;
+	}
+
+	/**
+	 * Get the user loaded
+	 *
+	 * @return User|null
+	 */
+	public function  getUser()
+	{
+		return $this->user;
 	}
 }

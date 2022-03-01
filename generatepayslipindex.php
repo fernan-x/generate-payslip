@@ -56,7 +56,9 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
-dol_include_once('/generatepayslip/class/payslipdatagenerator.class.php');
+dol_include_once('/generatepayslip/class/payslipdata.class.php');
+dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
+dol_include_once('/generatepayslip/class/payslipwriter.class.php');
 
 // Load translation files required by the page
 $langs->loadLangs(array("generatepayslip@generatepayslip"));
@@ -101,112 +103,13 @@ require_once DOL_DOCUMENT_ROOT.'/core/modules/export/modules_export.php';
 $workingDays = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
 $referenceUser = new User($db);
 $user->fetch(2);
-$datas = new PayslipDataGenerator($db, dol_now(), $workingDays, $user);
-
-//$datas->generate();
-/*$outputLangs = new Translate('', $conf);
-$outputLangs->setDefaultLang('en_US');
-$outputLangs->loadLangs(['main']);
-
-$dayRow = array();
-
-for ($i = $firstDay; $i < $lastDay; $i = strtotime('+1 day', $i)) {
-	$row = array();
-	$row['key'] = dol_strtolower(dol_print_date($i, '%A', 'auto', $outputLangs));
-	$row['number'] = intval(dol_print_date($i, '%d', 'auto', $outputLangs));
-	// Set worked day
-	if (in_array($row['key'], $workingDay)) {
-		$row['worked'] = true;
-	} else {
-		$row['worked'] = false;
-	}
-
-	// Add holiday to the worked day
-
-
-	$dayRow[$i] = $row;
-}
-
-print '<pre>';
-var_dump($dayRow);
-print '</pre>';
-*/
-
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Shared\Date;
-
-require_once DOL_DOCUMENT_ROOT.'/includes/phpoffice/phpspreadsheet/src/autoloader.php';
-require_once DOL_DOCUMENT_ROOT.'/includes/Psr/autoloader.php';
-dol_include_once('/generatepayslip/vendor/autoload.php');
-
-// Create a copy of the spreadsheet
-$sample = dol_buildpath('/generatepayslip/assets/sample.xls');
-$destinationPath = $conf->generatepayslip->multidir_output[$conf->entity];
-if (empty($destinationPath)) {
-	$destinationPath = $conf->generatepayslip->dir_output;
-}
-$sampleCopy = $destinationPath.'/test.xlsx';
-require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
-$res = dol_copy($sample, $sampleCopy);
-
-// Load spreadsheet
-$spreadsheet = IOFactory::load($sampleCopy);
-
+$datas = new PayslipData($db, dol_now(), $workingDays, $user);
 
 // Load the correct worksheet in function of the month
-dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
 $spreadsheetParser = new Code42SpreadsheetParser();
-$month = $datas->getMonth();
 
-$name = $spreadsheetParser->getWorksheetNameByMonth($month);
-$worksheet = $spreadsheet->getSheetByName($name);
-$rules = $spreadsheetParser->getRuleForWorksheet($name);
-
-if ($worksheet && $rules) {
-	// Debug date of the worksheet
-	$date = $worksheet->getCell($rules['date'])->getValue();
-	$date = Date::excelToTimestamp($date);
-	var_dump(dol_print_date($date));
-
-	// Fill date and year datas
-	$worksheet->setCellValue($rules['date'], Date::stringToExcel(dol_print_date($datas->getFirstMonthDay(), '%Y-%m-%d')));
-	$worksheet->setCellValue($rules['year'], $datas->getYear());
-
-	// Fill enterprise name
-	$worksheet->setCellValue($rules['company'], $mysoc->name);
-
-	// Fill user name
-	$worksheet->setCellValue($rules['username'],  $user->getFullName($langs));
-
-	$daysData = $datas->getDaysData();
-	$row = $rules['row']['from'];
-	foreach ($daysData as $day) {
-		if ($row <= $rules['row']['to']) { // Avoid going outside of the row setup
-			if ($day['worked']) {
-				// Fill worked day
-				$worksheet->setCellValue($rules['hour_start_m'].$row, '08:00');
-				$worksheet->setCellValue($rules['hour_end_m'].$row, '12:00');
-				$worksheet->setCellValue($rules['hour_start_a'].$row, '14:00');
-				$worksheet->setCellValue($rules['hour_end_a'].$row, '17:00');
-			} else if ($day['absenceReason'] != 'NWD') { // We avoid absence of type not working day
-				// Fill absence column
-				if ($day['absenceReason'] == 'LEAVE_PAID_FR') {
-					$reason = 'CP';
-				} else {
-					$reason = $day['absenceReason'];
-				}
-				$worksheet->setCellValue($rules['holiday'].$row, $reason);
-			}
-		}
-
-		$row++;
-	}
-
-	$objWriter = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
-	$objWriter->save($sampleCopy);
-} else {
-	print "Can't load worksheet ".$name;
-}
+$writer = new PayslipWriter($db, $spreadsheetParser, $datas);
+$writer->write();
 
 // End of page
 llxFooter();
