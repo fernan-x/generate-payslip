@@ -2,6 +2,7 @@
 
 use PhpOffice\PhpSpreadsheet\IOFactory;
 use PhpOffice\PhpSpreadsheet\Shared\Date;
+use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 require_once DOL_DOCUMENT_ROOT.'/includes/phpoffice/phpspreadsheet/src/autoloader.php';
@@ -38,16 +39,6 @@ class PayslipWriter {
 		$this->_month = $data->getMonth();
 	}
 
-	private function _writeHolidays()
-	{
-
-	}
-
-	private function _writeExpenses()
-	{
-
-	}
-
 	/**
 	 * Method executed before the spreadsheet writing.
 	 * This will copy the spreadsheet given as a sample.
@@ -65,7 +56,8 @@ class PayslipWriter {
 			$destinationPath = $conf->generatepayslip->dir_output;
 		}
 
-		$sampleCopy = $destinationPath.'/test.xlsx';
+		$filename = 'test.xslx'; // TODO : change the filename
+		$sampleCopy = $destinationPath.'/'.$filename;
 
 		$res = dol_copy($sample, $sampleCopy);
 
@@ -73,14 +65,81 @@ class PayslipWriter {
 	}
 
 	/**
-	 * Write the payslip for the month
+	 * Fill each days on the spreadsheet
 	 *
-	 * @return void
+	 * @param 	array 			$rules			Parser rules for the spreadsheet
+	 * @param 	Worksheet 		$worksheet		Active worksheet to complete
+	 * @return 	void
+	 * @throws 	Exception
+	 */
+	private function _fillDaysData($rules, $worksheet)
+	{
+		$daysData = $this->_data->getDaysData();
+		$row = $rules['row']['from'];
+		foreach ($daysData as $day) {
+			if ($row <= $rules['row']['to']) { // Avoid going outside of the row setup
+				if ($day['worked']) {
+					// Fill worked day
+					$worksheet->setCellValue($rules['hour_start_m'].$row, '08:00');
+					$worksheet->setCellValue($rules['hour_end_m'].$row, '12:00');
+					$worksheet->setCellValue($rules['hour_start_a'].$row, '14:00');
+					$worksheet->setCellValue($rules['hour_end_a'].$row, '17:00');
+				} else if ($day['absenceReason'] != 'NWD') { // We avoid absence of type not working day
+					// Fill absence column
+					if ($day['absenceReason'] == 'LEAVE_PAID_FR') {
+						$reason = 'CP';
+					} else {
+						$reason = $day['absenceReason'];
+					}
+					$worksheet->setCellValue($rules['holiday'].$row, $reason);
+				}
+
+				// Fill expenses
+				if ($day['expenses']) {
+					foreach ($day['expenses'] as $key => $value) {
+						$worksheet->setCellValue($rules[$key].$row, $value);
+					}
+				}
+			}
+
+			$row++;
+		}
+	}
+
+	/**
+	 * Save the new spredsheet
+	 *
+	 * @param 	string 		$spreadsheetCopy		New spreadsheet path
+	 * @return 	string|null							New spreadsheet path on success or null on error
+	 * @throws 	Exception
+	 */
+	private function _save($spreadsheetCopy)
+	{
+		$ret = null;
+		$objWriter = new Xlsx($this->_spreadsheet);
+
+		try {
+			$objWriter->save($spreadsheetCopy);
+			$ret = $spreadsheetCopy;
+		} catch (Exception $e) {
+			dol_syslog('Can\'t save the worksheet'.$e->getMessage(), LOG_ERR);
+		}
+
+		return $ret;
+	}
+
+	/**
+	 * Write the payslip for the month and the user
+	 *
+	 * @return string|null 			Path of the new spreadsheet or null
 	 */
 	public function write()
 	{
 		global $mysoc, $langs;
 
+		$ret = null;
+
+		// Execute actions before writing
 		$spreadsheetCopy = $this->_beforeWriting();
 
 		if ($spreadsheetCopy) {
@@ -92,11 +151,6 @@ class PayslipWriter {
 			$rules = $this->_parser->getRuleForWorksheet($name);
 
 			if ($worksheet && $rules) {
-				// Debug date of the worksheet
-				$date = $worksheet->getCell($rules['date'])->getValue();
-				$date = Date::excelToTimestamp($date);
-				var_dump(dol_print_date($date));
-
 				// Fill date and year datas
 				$worksheet->setCellValue($rules['date'], Date::stringToExcel(dol_print_date($this->_data->getFirstMonthDay(), '%Y-%m-%d')));
 				$worksheet->setCellValue($rules['year'], $this->_data->getYear());
@@ -110,43 +164,18 @@ class PayslipWriter {
 					$worksheet->setCellValue($rules['username'], $loadedUser->getFullName($langs));
 				}
 
-				$daysData = $this->_data->getDaysData();
-				$row = $rules['row']['from'];
-				foreach ($daysData as $day) {
-					if ($row <= $rules['row']['to']) { // Avoid going outside of the row setup
-						if ($day['worked']) {
-							// Fill worked day
-							$worksheet->setCellValue($rules['hour_start_m'].$row, '08:00');
-							$worksheet->setCellValue($rules['hour_end_m'].$row, '12:00');
-							$worksheet->setCellValue($rules['hour_start_a'].$row, '14:00');
-							$worksheet->setCellValue($rules['hour_end_a'].$row, '17:00');
-						} else if ($day['absenceReason'] != 'NWD') { // We avoid absence of type not working day
-							// Fill absence column
-							if ($day['absenceReason'] == 'LEAVE_PAID_FR') {
-								$reason = 'CP';
-							} else {
-								$reason = $day['absenceReason'];
-							}
-							$worksheet->setCellValue($rules['holiday'].$row, $reason);
-						}
+				// Fill days
+				$this->_fillDaysData($rules, $worksheet);
 
-						// Fill expenses
-						if ($day['expenses']) {
-							foreach ($day['expenses'] as $key => $value) {
-								$worksheet->setCellValue($rules[$key].$row, $value);
-							}
-						}
-					}
-
-					$row++;
-				}
-
-				$objWriter = new Xlsx($this->_spreadsheet);
-				$objWriter->save($spreadsheetCopy);
+				// Save the new worksheet
+				$ret = $this->_save($spreadsheetCopy);
 			} else {
-				print "Can't load worksheet ".$name;
+				dol_syslog('Can\'t load worksheet or rules for '.$name, LOG_ERR);
 			}
+		} else {
+			dol_syslog('Can\'t create a copy of the sample', LOG_ERR);
 		}
 
+		return $ret;
 	}
 }

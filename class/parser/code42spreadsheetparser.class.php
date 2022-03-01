@@ -51,6 +51,21 @@ class Code42SpreadsheetParser {
 				'driving_cost' => 'M',
 				'other_cost' => 'N'
 			),
+			'mars' => array(
+				'date' => 'J1',
+				'year' => 'L1',
+				'company' => 'B1',
+				'username' => 'B3',
+				'row' => array('from' => 9, 'to' => 39),
+				'hour_start_m' => 'B',
+				'hour_end_m' => 'C',
+				'hour_start_a' => 'D',
+				'hour_end_a' => 'E',
+				'holiday' => 'H',
+				'eating_cost' => 'K',
+				'driving_cost' => 'M',
+				'other_cost' => 'N'
+			),
 		);
 	}
 
