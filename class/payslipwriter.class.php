@@ -56,7 +56,7 @@ class PayslipWriter {
 			$destinationPath = $conf->generatepayslip->dir_output;
 		}
 
-		$filename = 'test.xslx'; // TODO : change the filename
+		$filename = 'test.xlsx'; // TODO : change the filename
 		$sampleCopy = $destinationPath.'/'.$filename;
 
 		$res = dol_copy($sample, $sampleCopy);
