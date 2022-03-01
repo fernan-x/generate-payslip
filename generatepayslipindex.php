@@ -57,7 +57,7 @@ if (!$res) {
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
 dol_include_once('/generatepayslip/class/payslipdata.class.php');
-dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
+dol_include_once('/generatepayslip/class/parser/code42spreadsheetparser.class.php');
 dol_include_once('/generatepayslip/class/payslipwriter.class.php');
 
 // Load translation files required by the page
@@ -85,7 +85,29 @@ $now = dol_now();
  */
 
 // None
+if ($action == 'generate') {
+	// TODO : Make this variable dynamic
+	$workingDays = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
+	$referenceUser = new User($db);
+	$user->fetch(2);
 
+	// Load datas and parser
+	$datas = new PayslipData($db, dol_now(), $workingDays, $user);
+	$spreadsheetParser = new Code42SpreadsheetParser();
+
+	$writer = new PayslipWriter($db, $spreadsheetParser, $datas);
+	$res = $writer->write();
+
+	if ($res) {
+		setEventMessage($langs->trans('PSFileGenerated', $res));
+		header('Location: '.$_SERVER['PHP_SELF']);
+		exit;
+	} else {
+		setEventMessage($langs->trans('PSFileNotGenerated'), 'errors');
+		header('Location: '.$_SERVER['PHP_SELF']);
+		exit;
+	}
+}
 
 /*
  * View
@@ -97,19 +119,6 @@ $formfile = new FormFile($db);
 llxHeader("", $langs->trans("GeneratePayslipArea"));
 
 print load_fiche_titre($langs->trans("GeneratePayslipArea"), '', 'generatepayslip.png@generatepayslip');
-
-require_once DOL_DOCUMENT_ROOT.'/core/modules/export/modules_export.php';
-
-$workingDays = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
-$referenceUser = new User($db);
-$user->fetch(2);
-$datas = new PayslipData($db, dol_now(), $workingDays, $user);
-
-// Load the correct worksheet in function of the month
-$spreadsheetParser = new Code42SpreadsheetParser();
-
-$writer = new PayslipWriter($db, $spreadsheetParser, $datas);
-$writer->write();
 
 // End of page
 llxFooter();
