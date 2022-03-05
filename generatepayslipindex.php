@@ -56,6 +56,7 @@ if (!$res) {
 }
 
 require_once DOL_DOCUMENT_ROOT.'/core/class/html.formfile.class.php';
+dol_include_once('/generatepayslip/class/payslipdatagenerator.class.php');
 
 // Load translation files required by the page
 $langs->loadLangs(array("generatepayslip@generatepayslip"));
@@ -95,146 +96,117 @@ llxHeader("", $langs->trans("GeneratePayslipArea"));
 
 print load_fiche_titre($langs->trans("GeneratePayslipArea"), '', 'generatepayslip.png@generatepayslip');
 
-print '<div class="fichecenter"><div class="fichethirdleft">';
+require_once DOL_DOCUMENT_ROOT.'/core/modules/export/modules_export.php';
 
+$workingDays = array('monday', 'tuesday', 'wednesday', 'thursday', 'friday');
+$referenceUser = new User($db);
+$user->fetch(2);
+$datas = new PayslipDataGenerator($db, dol_now(), $workingDays, $user);
 
-/* BEGIN MODULEBUILDER DRAFT MYOBJECT
-// Draft MyObject
-if (! empty($conf->generatepayslip->enabled) && $user->rights->generatepayslip->read)
-{
-	$langs->load("orders");
+//$datas->generate();
+/*$outputLangs = new Translate('', $conf);
+$outputLangs->setDefaultLang('en_US');
+$outputLangs->loadLangs(['main']);
 
-	$sql = "SELECT c.rowid, c.ref, c.ref_client, c.total_ht, c.tva as total_tva, c.total_ttc, s.rowid as socid, s.nom as name, s.client, s.canvas";
-	$sql.= ", s.code_client";
-	$sql.= " FROM ".MAIN_DB_PREFIX."commande as c";
-	$sql.= ", ".MAIN_DB_PREFIX."societe as s";
-	if (! $user->rights->societe->client->voir && ! $socid) $sql.= ", ".MAIN_DB_PREFIX."societe_commerciaux as sc";
-	$sql.= " WHERE c.fk_soc = s.rowid";
-	$sql.= " AND c.fk_statut = 0";
-	$sql.= " AND c.entity IN (".getEntity('commande').")";
-	if (! $user->rights->societe->client->voir && ! $socid) $sql.= " AND s.rowid = sc.fk_soc AND sc.fk_user = ".((int) $user->id);
-	if ($socid)	$sql.= " AND c.fk_soc = ".((int) $socid);
+$dayRow = array();
 
-	$resql = $db->query($sql);
-	if ($resql)
-	{
-		$total = 0;
-		$num = $db->num_rows($resql);
-
-		print '<table class="noborder centpercent">';
-		print '<tr class="liste_titre">';
-		print '<th colspan="3">'.$langs->trans("DraftMyObjects").($num?'<span class="badge marginleftonlyshort">'.$num.'</span>':'').'</th></tr>';
-
-		$var = true;
-		if ($num > 0)
-		{
-			$i = 0;
-			while ($i < $num)
-			{
-
-				$obj = $db->fetch_object($resql);
-				print '<tr class="oddeven"><td class="nowrap">';
-
-				$myobjectstatic->id=$obj->rowid;
-				$myobjectstatic->ref=$obj->ref;
-				$myobjectstatic->ref_client=$obj->ref_client;
-				$myobjectstatic->total_ht = $obj->total_ht;
-				$myobjectstatic->total_tva = $obj->total_tva;
-				$myobjectstatic->total_ttc = $obj->total_ttc;
-
-				print $myobjectstatic->getNomUrl(1);
-				print '</td>';
-				print '<td class="nowrap">';
-				print '</td>';
-				print '<td class="right" class="nowrap">'.price($obj->total_ttc).'</td></tr>';
-				$i++;
-				$total += $obj->total_ttc;
-			}
-			if ($total>0)
-			{
-
-				print '<tr class="liste_total"><td>'.$langs->trans("Total").'</td><td colspan="2" class="right">'.price($total)."</td></tr>";
-			}
-		}
-		else
-		{
-
-			print '<tr class="oddeven"><td colspan="3" class="opacitymedium">'.$langs->trans("NoOrder").'</td></tr>';
-		}
-		print "</table><br>";
-
-		$db->free($resql);
+for ($i = $firstDay; $i < $lastDay; $i = strtotime('+1 day', $i)) {
+	$row = array();
+	$row['key'] = dol_strtolower(dol_print_date($i, '%A', 'auto', $outputLangs));
+	$row['number'] = intval(dol_print_date($i, '%d', 'auto', $outputLangs));
+	// Set worked day
+	if (in_array($row['key'], $workingDay)) {
+		$row['worked'] = true;
+	} else {
+		$row['worked'] = false;
 	}
-	else
-	{
-		dol_print_error($db);
-	}
+
+	// Add holiday to the worked day
+
+
+	$dayRow[$i] = $row;
 }
-END MODULEBUILDER DRAFT MYOBJECT */
 
-
-print '</div><div class="fichetwothirdright"><div class="ficheaddleft">';
-
-
-$NBMAX = $conf->global->MAIN_SIZE_SHORTLIST_LIMIT;
-$max = $conf->global->MAIN_SIZE_SHORTLIST_LIMIT;
-
-/* BEGIN MODULEBUILDER LASTMODIFIED MYOBJECT
-// Last modified myobject
-if (! empty($conf->generatepayslip->enabled) && $user->rights->generatepayslip->read)
-{
-	$sql = "SELECT s.rowid, s.ref, s.label, s.date_creation, s.tms";
-	$sql.= " FROM ".MAIN_DB_PREFIX."generatepayslip_myobject as s";
-	//if (! $user->rights->societe->client->voir && ! $socid) $sql.= ", ".MAIN_DB_PREFIX."societe_commerciaux as sc";
-	$sql.= " WHERE s.entity IN (".getEntity($myobjectstatic->element).")";
-	//if (! $user->rights->societe->client->voir && ! $socid) $sql.= " AND s.rowid = sc.fk_soc AND sc.fk_user = ".((int) $user->id);
-	//if ($socid)	$sql.= " AND s.rowid = $socid";
-	$sql .= " ORDER BY s.tms DESC";
-	$sql .= $db->plimit($max, 0);
-
-	$resql = $db->query($sql);
-	if ($resql)
-	{
-		$num = $db->num_rows($resql);
-		$i = 0;
-
-		print '<table class="noborder centpercent">';
-		print '<tr class="liste_titre">';
-		print '<th colspan="2">';
-		print $langs->trans("BoxTitleLatestModifiedMyObjects", $max);
-		print '</th>';
-		print '<th class="right">'.$langs->trans("DateModificationShort").'</th>';
-		print '</tr>';
-		if ($num)
-		{
-			while ($i < $num)
-			{
-				$objp = $db->fetch_object($resql);
-
-				$myobjectstatic->id=$objp->rowid;
-				$myobjectstatic->ref=$objp->ref;
-				$myobjectstatic->label=$objp->label;
-				$myobjectstatic->status = $objp->status;
-
-				print '<tr class="oddeven">';
-				print '<td class="nowrap">'.$myobjectstatic->getNomUrl(1).'</td>';
-				print '<td class="right nowrap">';
-				print "</td>";
-				print '<td class="right nowrap">'.dol_print_date($db->jdate($objp->tms), 'day')."</td>";
-				print '</tr>';
-				$i++;
-			}
-
-			$db->free($resql);
-		} else {
-			print '<tr class="oddeven"><td colspan="3" class="opacitymedium">'.$langs->trans("None").'</td></tr>';
-		}
-		print "</table><br>";
-	}
-}
+print '<pre>';
+var_dump($dayRow);
+print '</pre>';
 */
 
-print '</div></div></div>';
+use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\Shared\Date;
+
+require_once DOL_DOCUMENT_ROOT.'/includes/phpoffice/phpspreadsheet/src/autoloader.php';
+require_once DOL_DOCUMENT_ROOT.'/includes/Psr/autoloader.php';
+dol_include_once('/generatepayslip/vendor/autoload.php');
+
+// Create a copy of the spreadsheet
+$sample = dol_buildpath('/generatepayslip/assets/sample.xls');
+$destinationPath = $conf->generatepayslip->multidir_output[$conf->entity];
+if (empty($destinationPath)) {
+	$destinationPath = $conf->generatepayslip->dir_output;
+}
+$sampleCopy = $destinationPath.'/test.xlsx';
+require_once DOL_DOCUMENT_ROOT.'/core/lib/files.lib.php';
+$res = dol_copy($sample, $sampleCopy);
+
+// Load spreadsheet
+$spreadsheet = IOFactory::load($sampleCopy);
+
+
+// Load the correct worksheet in function of the month
+dol_include_once('/generatepayslip/class/code42spreadsheetparser.class.php');
+$spreadsheetParser = new Code42SpreadsheetParser();
+$month = $datas->getMonth();
+
+$name = $spreadsheetParser->getWorksheetNameByMonth($month);
+$worksheet = $spreadsheet->getSheetByName($name);
+$rules = $spreadsheetParser->getRuleForWorksheet($name);
+
+if ($worksheet && $rules) {
+	// Debug date of the worksheet
+	$date = $worksheet->getCell($rules['date'])->getValue();
+	$date = Date::excelToTimestamp($date);
+	var_dump(dol_print_date($date));
+
+	// Fill date and year datas
+	$worksheet->setCellValue($rules['date'], Date::stringToExcel(dol_print_date($datas->getFirstMonthDay(), '%Y-%m-%d')));
+	$worksheet->setCellValue($rules['year'], $datas->getYear());
+
+	// Fill enterprise name
+	$worksheet->setCellValue($rules['company'], $mysoc->name);
+
+	// Fill user name
+	$worksheet->setCellValue($rules['username'],  $user->getFullName($langs));
+
+	$daysData = $datas->getDaysData();
+	$row = $rules['row']['from'];
+	foreach ($daysData as $day) {
+		if ($row <= $rules['row']['to']) { // Avoid going outside of the row setup
+			if ($day['worked']) {
+				// Fill worked day
+				$worksheet->setCellValue($rules['hour_start_m'].$row, '08:00');
+				$worksheet->setCellValue($rules['hour_end_m'].$row, '12:00');
+				$worksheet->setCellValue($rules['hour_start_a'].$row, '14:00');
+				$worksheet->setCellValue($rules['hour_end_a'].$row, '17:00');
+			} else if ($day['absenceReason'] != 'NWD') { // We avoid absence of type not working day
+				// Fill absence column
+				if ($day['absenceReason'] == 'LEAVE_PAID_FR') {
+					$reason = 'CP';
+				} else {
+					$reason = $day['absenceReason'];
+				}
+				$worksheet->setCellValue($rules['holiday'].$row, $reason);
+			}
+		}
+
+		$row++;
+	}
+
+	$objWriter = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
+	$objWriter->save($sampleCopy);
+} else {
+	print "Can't load worksheet ".$name;
+}
 
 // End of page
 llxFooter();
